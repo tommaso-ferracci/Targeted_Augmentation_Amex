@@ -1,0 +1,8 @@
+{
+    "objective": "binary:logistic",
+    "device": "cuda:6",
+    "max_depth": 6,
+    "learning_rate": 0.01,
+    "subsample": 0.8,
+    "colsample_bytree": 0.5
+}
