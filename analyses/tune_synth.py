@@ -1,6 +1,7 @@
 import sys, os
 sys.path.append(os.path.join(os.getcwd(), '..'))
 
+import copy
 import pickle
 import numpy as np
 import pandas as pd
@@ -74,22 +75,23 @@ def scoring_function(mod_name, hyperparams):
         X_train_aug = np.vstack((X_train, X_synth))
         y_train_aug = np.concatenate((y_train, y_synth))
         scores.append(get_xgboost_score(X_train_aug, y_train_aug))
-    hyperparams['mod_name'] = mod_name
-    append_to_pickle_file('../outputs/synthesizers/hyperparams_hard_10.pkl', hyperparams)
+    hyperparams_log = copy.deepcopy(hyperparams)
+    hyperparams_log['mod_name'] = mod_name
+    append_to_pickle_file('../outputs/synthesizers/hyperparams_hard_10.pkl', hyperparams_log)
     append_to_pickle_file('../outputs/synthesizers/scores_hard_10.pkl', scores)
     return np.mean(scores)
 
 # Candidate models and their hyperparameter sets
 tunables = {
     'TVAE': Tunable({
-    'batch_size': hp.IntHyperParam(min=100, max=1000, default=500, step=100),
-    'epochs': hp.IntHyperParam(min=50, max=300, default=100, step=50),
-    'embedding_dim': hp.IntHyperParam(min=64, max=512,default=128, step=64),
+    'batch_size': hp.IntHyperParam(min=100, max=1000, default=500, step=1),
+    'epochs': hp.IntHyperParam(min=50, max=300, default=100, step=1),
+    'embedding_dim': hp.IntHyperParam(min=64, max=512,default=128, step=1),
 }),
     'CTGAN': Tunable({
-    'batch_size': hp.IntHyperParam(min=100, max=1000,default=500, step=100),
-    'epochs': hp.IntHyperParam(min=20, max=200, default=50, step=10),
-    'embedding_dim': hp.IntHyperParam(min=64, max=512,default=128, step=64),
+    'batch_size': hp.IntHyperParam(min=100, max=1000,default=500, step=1),
+    'epochs': hp.IntHyperParam(min=20, max=200, default=50, step=1),
+    'embedding_dim': hp.IntHyperParam(min=64, max=512,default=128, step=1),
 })
 }
 

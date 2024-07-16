@@ -28,9 +28,9 @@ metadata.detect_from_dataframe(X_worst_df)
 synthesizer = CTGANSynthesizer(
     metadata, # required
     batch_size=100,
-    epochs=21,
+    epochs=200,
     embedding_dim=64,
-    cuda='cuda:5',
+    cuda='cuda:0',
     verbose=True
 )
 

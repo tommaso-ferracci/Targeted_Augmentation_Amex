@@ -15,6 +15,8 @@ y_train = np.load('../data/processed/train.npz', allow_pickle=True)['y']
 X_v = np.load('../data/processed/v.npz', allow_pickle=True)['x']
 y_v = np.load('../data/processed/v.npz', allow_pickle=True)['y']
 
+tot_score, _ = train_xgb(X_train, y_train, X_v, y_v, n=10)
+
 current_class_distribution = pd.Series(y_train).value_counts()
 majority_class = current_class_distribution.idxmax()
 minority_class = current_class_distribution.idxmin()
@@ -29,7 +31,7 @@ for _ in tqdm(range(10)):
     smote = SMOTE(sampling_strategy=sampling_strategy, random_state=_) 
     X_smote, y_smote = smote.fit_resample(X_train, y_train)
     mean, _ = train_xgb(X_smote, y_smote, X_v, y_v, n=10)
-    means_base.append(mean)
+    means_base.append(mean - tot_score)
 
 with open('../outputs/synthesizers/smote_base.pkl', 'wb') as f:
     pickle.dump(means_base, f)
@@ -57,7 +59,7 @@ for _ in tqdm(range(10)):
     X_smote_hard = np.vstack((X_rest, X_smote_hard))
     y_smote_hard = np.concatenate((y_rest, y_smote_hard))
     mean, _ = train_xgb(X_smote_hard, y_smote_hard, X_v, y_v, n=10)
-    means_hard.append(mean)
+    means_hard.append(mean - tot_score)
 
 with open('../outputs/synthesizers/smote_hard.pkl', 'wb') as f:
     pickle.dump(means_hard, f)
