@@ -1,16 +1,5 @@
 import numpy as np
 
-'''
-from sklearn.metrics import roc_auc_score
-
-def amex_metric(y_true, y_pred):
-    return roc_auc_score(y_true, y_pred)
-
-def amex_scorer(preds, dtrain):
-    y = dtrain.get_label()
-    return 'auc', roc_auc_score(y, preds)
-'''
-
 def amex_metric(y_true, y_pred):
     'Calculate the custom AMEX evalutaion metric'
     '''

@@ -8,6 +8,7 @@ import pandas as pd
 
 from sdv.metadata import SingleTableMetadata
 from sdv.single_table import TVAESynthesizer, CTGANSynthesizer
+from ctgan import TVAE, CTGAN
 from baytune import BTBSession
 from baytune.tuning import Tunable
 from baytune.tuning import hyperparams as hp
@@ -33,25 +34,25 @@ y_train = np.load('../data/processed/train.npz')['y']
 X_v = np.load('../data/processed/v.npz')['x']
 y_v = np.load('../data/processed/v.npz')['y']
 
-knn_5 = pd.read_csv('../outputs/results/knn_5.csv')['0']
-ind_5 = knn_5.sort_values(ascending=True).index
-X_worst = X_train[ind_5[:(len(X_train) // 10)]]
-y_worst = y_train[ind_5[:(len(X_train) // 10)]]
+knn_100 = pd.read_csv('../outputs/results/knn_100.csv')['0']
+ind_100 = knn_100.sort_values(ascending=True).index
+X_hard = X_train[ind_100[:(len(X_train) // 10)]]
+y_hard = y_train[ind_100[:(len(X_train) // 10)]]
 
-X_worst_df = pd.DataFrame(X_worst)
-X_worst_df['target'] = y_worst
+X_hard_df = pd.DataFrame(X_hard)
+X_hard_df['target'] = y_hard
 
 # Infer metadata: categorical and numeric features
 metadata = SingleTableMetadata()
-metadata.detect_from_dataframe(X_worst_df)
+metadata.detect_from_dataframe(X_hard_df)
 
 # Compute average score on all data
-tot_score, _ = train_xgb(X_train, y_train, X_v, y_v, n=10)
+tot_score, _ = train_xgb(X_train, y_train, X_v, y_v, n=100)
 print(tot_score)
 
 def get_xgboost_score(X_train, y_train):
     # Compute difference in average score with respect to all data
-    new_score, _ = train_xgb(X_train, y_train, X_v, y_v, n=10)
+    new_score, _ = train_xgb(X_train, y_train, X_v, y_v, n=100)
     return new_score - tot_score
 
 mods = {
@@ -59,17 +60,46 @@ mods = {
     'CTGAN': CTGANSynthesizer,
 }
 
+synths = {
+    'TVAE': TVAE,
+    'CTGAN': CTGAN
+}
+
+def transform_dict(mod_name, hyperparams):
+    params = {}
+    if mod_name == 'TVAE':
+        params['embedding_dim'] = hyperparams['embedding_dim']
+        params['compress_dims'] = (hyperparams['compress_dims_0'], hyperparams['compress_dims_1'])
+        params['decompress_dims'] = (hyperparams['decompress_dims_0'], hyperparams['decompress_dims_1'])
+    else:
+        params['embedding_dim'] = hyperparams['embedding_dim']
+        params['discriminator_dim'] = (hyperparams['discriminator_dim_0'], hyperparams['discriminator_dim_1'])
+        params['generator_dim'] = (hyperparams['generator_dim_0'], hyperparams['generator_dim_1'])
+    return params
+
 def scoring_function(mod_name, hyperparams):
     '''
     Scorer for a synthesizer: quantifies validation performance variation 
     when synthetic data is added to training dataset.
     '''
+    global ind
     mod_class = mods[mod_name]
-    mod_instance = mod_class(metadata, **hyperparams)
-    mod_instance.fit(X_worst_df)
+    params = transform_dict(mod_name, hyperparams)
+    mod_instance = mod_class(metadata, 
+                             save_path=f'../outputs/synthesizers/tuning_2/{ind}.pkl',
+                             epochs=500,
+                             batch_size=10000,
+                             cuda='cuda:1',
+                             patience=50,
+                             weights=pd.read_csv('../outputs/results/feature_importances.csv')['gain'].values,
+                             **params)
+    mod_instance.fit(X_hard_df)
+    # restore best model
+    mod_instance = synths[mod_name].load(f'../outputs/synthesizers/tuning_2/{ind}.pkl')
+    ind += 1
     scores = []
     for _ in range(10): # Repeat 10 times to mitigate randomness
-        synthetic_data = mod_instance.sample(num_rows=len(y_worst))
+        synthetic_data = mod_instance.sample(len(y_hard))
         X_synth = synthetic_data.drop('target', axis=1).values
         y_synth = np.array(synthetic_data['target'])
         X_train_aug = np.vstack((X_train, X_synth))
@@ -77,21 +107,25 @@ def scoring_function(mod_name, hyperparams):
         scores.append(get_xgboost_score(X_train_aug, y_train_aug))
     hyperparams_log = copy.deepcopy(hyperparams)
     hyperparams_log['mod_name'] = mod_name
-    append_to_pickle_file('../outputs/synthesizers/hyperparams_hard_10.pkl', hyperparams_log)
-    append_to_pickle_file('../outputs/synthesizers/scores_hard_10.pkl', scores)
+    append_to_pickle_file('../outputs/synthesizers/hyperparams_hard_2.pkl', hyperparams_log)
+    append_to_pickle_file('../outputs/synthesizers/scores_hard_2.pkl', scores)
     return np.mean(scores)
 
 # Candidate models and their hyperparameter sets
 tunables = {
     'TVAE': Tunable({
-    'batch_size': hp.IntHyperParam(min=100, max=1000, default=500, step=1),
-    'epochs': hp.IntHyperParam(min=50, max=300, default=100, step=1),
-    'embedding_dim': hp.IntHyperParam(min=64, max=512,default=128, step=1),
+    'embedding_dim': hp.IntHyperParam(min=32, max=512, default=64, step=1),
+    'compress_dims_0': hp.IntHyperParam(min=32, max=512, default=128, step=1), 
+    'compress_dims_1': hp.IntHyperParam(min=32, max=512, default=128, step=1),
+    'decompress_dims_0': hp.IntHyperParam(min=32, max=512, default=128, step=1), 
+    'decompress_dims_1': hp.IntHyperParam(min=32, max=512, default=128, step=1),
 }),
     'CTGAN': Tunable({
-    'batch_size': hp.IntHyperParam(min=100, max=1000,default=500, step=1),
-    'epochs': hp.IntHyperParam(min=20, max=200, default=50, step=1),
-    'embedding_dim': hp.IntHyperParam(min=64, max=512,default=128, step=1),
+    'embedding_dim': hp.IntHyperParam(min=32, max=512, default=64, step=1),
+    'discriminator_dim_0': hp.IntHyperParam(min=32, max=512, default=64, step=1), 
+    'discriminator_dim_1': hp.IntHyperParam(min=32, max=512, default=64, step=1),
+    'generator_dim_0': hp.IntHyperParam(min=32, max=512, default=64, step=1), 
+    'generator_dim_1': hp.IntHyperParam(min=32, max=512, default=64, step=1),
 })
 }
 
@@ -101,10 +135,11 @@ session = BTBSession(
     verbose=True
 )
 
-best_prop = session.run(50)
+ind = 0
+best_prop = session.run(20)
 print(best_prop)
 
 # Dump session results
-with open('../outputs/synthesizers/session_hard_10.pkl', "wb") as f:
+with open('../outputs/synthesizers/session_hard_2.pkl', "wb") as f:
     pickle.dump(session, f)
     
