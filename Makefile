@@ -4,7 +4,7 @@ PYTHON := $(VENV_DIR)/bin/python3
 PIP := $(VENV_DIR)/bin/pip
 JUPYTER := $(VENV_DIR)/bin/jupyter
 REQUIREMENTS := requirements.txt
-NOTEBOOK := analyses/notebook.ipynb
+NOTEBOOK := analyses/simulation.ipynb
 
 # Default target: create virtual environment, install dependencies, and run notebook
 all: venv install execute
